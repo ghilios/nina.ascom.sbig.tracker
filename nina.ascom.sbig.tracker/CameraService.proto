@@ -22,6 +22,7 @@ service CameraService {
 	rpc StartY_set (SetIntPropertyRequest) returns (google.protobuf.Empty);
 	rpc BayerOffsetX_get (google.protobuf.Empty) returns (GetShortPropertyReply);
 	rpc BayerOffsetY_get (google.protobuf.Empty) returns (GetShortPropertyReply);
+	rpc CanFastReadout_get (google.protobuf.Empty) returns (GetBoolPropertyReply);
 	rpc FastReadout_get (google.protobuf.Empty) returns (GetBoolPropertyReply);
 	rpc FastReadout_set (SetBoolPropertyRequest) returns (google.protobuf.Empty);
 	rpc Gain_get (google.protobuf.Empty) returns (GetShortPropertyReply);
@@ -36,6 +37,7 @@ service CameraService {
 	rpc SensorName_get (google.protobuf.Empty) returns (GetStringPropertyReply);	
 	rpc SensorType_get (google.protobuf.Empty) returns (GetSensorTypeReply);
 	rpc Offset_get (google.protobuf.Empty) returns (GetIntPropertyReply);
+	rpc Offset_set (SetIntPropertyRequest) returns (google.protobuf.Empty);
 	rpc OffsetMin_get (google.protobuf.Empty) returns (GetIntPropertyReply);
 	rpc OffsetMax_get (google.protobuf.Empty) returns (GetIntPropertyReply);
 	rpc MaxBinX_get (google.protobuf.Empty) returns (GetShortPropertyReply);
@@ -43,7 +45,12 @@ service CameraService {
 	rpc MaxADU_get (google.protobuf.Empty) returns (GetIntPropertyReply);
 	rpc LastExposureDuration_get (google.protobuf.Empty) returns (GetDoublePropertyReply);
 	rpc BinX_get (google.protobuf.Empty) returns (GetShortPropertyReply);
+	rpc BinX_set (SetShortPropertyRequest) returns (google.protobuf.Empty);
 	rpc BinY_get (google.protobuf.Empty) returns (GetShortPropertyReply);
+	rpc BinY_set (SetShortPropertyRequest) returns (google.protobuf.Empty);
+	rpc ExposureMin_get (google.protobuf.Empty) returns (GetDoublePropertyReply);
+	rpc ExposureMax_get (google.protobuf.Empty) returns (GetDoublePropertyReply);
+	rpc ExposureResolution_get (google.protobuf.Empty) returns (GetDoublePropertyReply);
 	rpc CCDTemperature_get (google.protobuf.Empty) returns (GetDoublePropertyReply);
 	rpc CameraState_get (google.protobuf.Empty) returns (GetCameraStatesReply);
 	rpc CameraXSize_get (google.protobuf.Empty) returns (GetIntPropertyReply);

@@ -1,0 +1,26 @@
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProductVersion>1.0</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>f531ac48-9cb6-47da-87d8-c945bfa49f2d</ProjectGuid>
+    <AssemblyName>SbigTrackerSetup</AssemblyName>
+    <Name>SbigTrackerSetup</Name>
+    <RootNamespace>SbigTrackerSetup</RootNamespace>
+    <InnoSetupPath>C:\Program Files (x86)\Inno Setup 6</InnoSetupPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <OutputPath>
+    </OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <OutputPath>
+    </OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="InstallScript.iss">
+    </Compile>
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath)\InnoSetupTools\InnoSetupProject.targets" />
+</Project>

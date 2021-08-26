@@ -1,31 +1,20 @@
 //tabs=4
 // --------------------------------------------------------------------------------
-// TODO fill in this information for your driver, then remove this line!
+// ASCOM Camera driver for NINA's SBIGTracker
 //
-// ASCOM Camera driver for SBIGTracker
+// Description:	A thin ASCOM driver that connects to an SBIG tracking CCD that is
+//              internal to an SBIG camera connected in NINA using its native driver
 //
-// Description:	Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam 
-//				nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam 
-//				erat, sed diam voluptua. At vero eos et accusam et justo duo 
-//				dolores et ea rebum. Stet clita kasd gubergren, no sea takimata 
-//				sanctus est Lorem ipsum dolor sit amet.
-//
-// Implements:	ASCOM Camera interface version: <To be completed by driver developer>
-// Author:		(XXX) Your N. Here <your@email.here>
+// Implements:	ASCOM Camera interface version: V3
+// Author:		(ghilios) George Hilios <ghilios@gmail.com>
 //
 // Edit Log:
 //
 // Date			Who	Vers	Description
 // -----------	---	-----	-------------------------------------------------------
-// dd-mmm-yyyy	XXX	6.0.0	Initial edit, created from ASCOM driver template
+// 23-08-2021	ghilios	6.0.0	Initial edit, created from ASCOM driver template
 // --------------------------------------------------------------------------------
 //
-
-
-// This is used to define code in the template that is specific to one class implementation
-// unused code can be deleted and this definition removed.
-#define Camera
-
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -39,10 +28,12 @@ using ASCOM.Utilities;
 using ASCOM.DeviceInterface;
 using System.Globalization;
 using System.Collections;
+using GrpcDotNetNamedPipes;
+using NINA.Core.API.ASCOM.Camera;
 
-namespace ASCOM.SBIGTracker {
+namespace ASCOM.NINA.SBIGTracker {
     //
-    // Your driver's DeviceID is ASCOM.SBIGTracker.Camera
+    // Your driver's DeviceID is ASCOM.NINA.SBIGTracker.Camera
     //
     // The Guid attribute sets the CLSID for ASCOM.SBIGTracker.Camera
     // The ClassInterface/None attribute prevents an empty interface called
@@ -62,19 +53,25 @@ namespace ASCOM.SBIGTracker {
         /// ASCOM DeviceID (COM ProgID) for this driver.
         /// The DeviceID is used by ASCOM applications to load the driver at runtime.
         /// </summary>
-        internal static string driverID = "ASCOM.SBIGTracker.Camera";
-        // TODO Change the descriptive string for your driver then remove this line
+        internal static string driverID = "ASCOM.NINA.SBIGTracker.Camera";
         /// <summary>
         /// Driver description that displays in the ASCOM Chooser.
         /// </summary>
-        private static string driverDescription = "ASCOM Camera Driver for SBIGTracker.";
+        private static string driverDescription = "ASCOM Camera Driver for NINA.SBIG.Tracker";
 
-        internal static string comPortProfileName = "COM Port"; // Constants used for Profile persistence
-        internal static string comPortDefault = "COM1";
-        internal static string traceStateProfileName = "Trace Level";
-        internal static string traceStateDefault = "false";
+        private static string serverPipeNameProfileName = "NINA.ASCOM.Camera.SBIG.Tracker Pipe Name";
+        private static string serverPipeNameDefault = "NINA.ASCOM.Camera.SBIG.Tracker";
+        private static string rpcTimeoutSecondsProfileName = "NINA.ASCOM.Camera.SBIG.Tracker RPC Timeout Seconds";
+        private static string rpcTimeoutSecondsDefault = "10";
+        private static string traceStateProfileName = "Trace Level";
+        private static readonly string traceStateDefault = "false";
+        private NamedPipeChannel rpcChannel;
+        private CameraService.CameraServiceClient rpcClient;
 
-        internal static string comPort; // Variables to hold the current device configuration
+        internal static string serverPipeName;
+        internal static int rpcTimeoutSeconds;
+
+        private static global::Google.Protobuf.WellKnownTypes.Empty EMPTY_ARGS = new global::Google.Protobuf.WellKnownTypes.Empty();
 
         /// <summary>
         /// Private variable to hold the connected state
@@ -109,9 +106,12 @@ namespace ASCOM.SBIGTracker {
             connectedState = false; // Initialise connected to false
             utilities = new Util(); //Initialise util object
             astroUtilities = new AstroUtils(); // Initialise astro-utilities object
-            //TODO: Implement your additional construction here
 
             tl.LogMessage("Camera", "Completed initialisation");
+        }
+
+        public DateTime GetDeadline() {
+            return DateTime.Now + TimeSpan.FromSeconds(rpcTimeoutSeconds);
         }
 
 
@@ -130,8 +130,9 @@ namespace ASCOM.SBIGTracker {
         public void SetupDialog() {
             // consider only showing the setup dialog if not connected
             // or call a different dialog if connected
-            if (IsConnected)
+            if (IsConnected) {
                 System.Windows.Forms.MessageBox.Show("Already connected, just press OK");
+            }
 
             using (SetupDialogForm F = new SetupDialogForm(tl)) {
                 var result = F.ShowDialog();
@@ -154,30 +155,14 @@ namespace ASCOM.SBIGTracker {
         }
 
         public void CommandBlind(string command, bool raw) {
-            CheckConnected("CommandBlind");
-            // TODO The optional CommandBlind method should either be implemented OR throw a MethodNotImplementedException
-            // If implemented, CommandBlind must send the supplied command to the mount and return immediately without waiting for a response
-
             throw new ASCOM.MethodNotImplementedException("CommandBlind");
         }
 
         public bool CommandBool(string command, bool raw) {
-            CheckConnected("CommandBool");
-            // TODO The optional CommandBool method should either be implemented OR throw a MethodNotImplementedException
-            // If implemented, CommandBool must send the supplied command to the mount, wait for a response and parse this to return a True or False value
-
-            // string retString = CommandString(command, raw); // Send the command and wait for the response
-            // bool retBool = XXXXXXXXXXXXX; // Parse the returned string and create a boolean True / False value
-            // return retBool; // Return the boolean value to the client
-
             throw new ASCOM.MethodNotImplementedException("CommandBool");
         }
 
         public string CommandString(string command, bool raw) {
-            CheckConnected("CommandString");
-            // TODO The optional CommandString method should either be implemented OR throw a MethodNotImplementedException
-            // If implemented, CommandString must send the supplied command to the mount and wait for a response before returning this to the client
-
             throw new ASCOM.MethodNotImplementedException("CommandString");
         }
 
@@ -190,6 +175,8 @@ namespace ASCOM.SBIGTracker {
             utilities = null;
             astroUtilities.Dispose();
             astroUtilities = null;
+            rpcClient = null;
+            rpcChannel = null;
         }
 
         public bool Connected {
@@ -199,23 +186,54 @@ namespace ASCOM.SBIGTracker {
             }
             set {
                 tl.LogMessage("Connected", "Set {0}", value);
-                if (value == IsConnected)
+                if (value == IsConnected) {
                     return;
+                }
 
                 if (value) {
-                    connectedState = true;
-                    LogMessage("Connected Set", "Connecting to port {0}", comPort);
-                    // TODO connect to the device
+                    Connect();
                 } else {
-                    connectedState = false;
-                    LogMessage("Connected Set", "Disconnecting from port {0}", comPort);
-                    // TODO disconnect from the device
+                    Disconnect();
                 }
             }
         }
 
+        private System.Timers.Timer heartbeatTimer = null;
+        private void Connect() {
+            connectedState = true;
+            LogMessage("Connected Set", "Connecting to pipe {0}", serverPipeName);
+            rpcChannel = new NamedPipeChannel(".", serverPipeName);
+            rpcClient = GrpcClientErrorHandlingProxy<CameraService.CameraServiceClient>.Wrap(new CameraService.CameraServiceClient(rpcChannel));
+            heartbeatTimer?.Dispose();
+            heartbeatTimer = null;
+
+            // TODO: Consider making this heartbeat interval configurable
+            heartbeatTimer = new System.Timers.Timer() {
+                Interval = 5000,
+                AutoReset = true
+            };
+            heartbeatTimer.Elapsed += HeartbeatTimer_Elapsed;
+            heartbeatTimer.Start();
+        }
+
+        private void HeartbeatTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e) {
+            try {
+                rpcClient?.CameraXSize_get(EMPTY_ARGS, deadline: GetDeadline());
+            } catch (Exception) {
+                tl.LogMessage("IsConnected", "RPC heartbeat failed. Assuming server disconnected");
+                Disconnect();
+            }
+        }
+
+        private void Disconnect() {
+            connectedState = false;
+            heartbeatTimer?.Stop();
+            heartbeatTimer?.Dispose();
+            heartbeatTimer = null;
+            LogMessage("Connected Set", "Disconnecting from pipe {0}", serverPipeName);
+        }
+
         public string Description {
-            // TODO customise this device description
             get {
                 tl.LogMessage("Description Get", driverDescription);
                 return driverDescription;
@@ -225,8 +243,7 @@ namespace ASCOM.SBIGTracker {
         public string DriverInfo {
             get {
                 Version version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-                // TODO customise this driver description
-                string driverInfo = "Information about the driver itself. Version: " + String.Format(CultureInfo.InvariantCulture, "{0}.{1}", version.Major, version.Minor);
+                string driverInfo = "ASCOM driver for SBIG Tracker CCDs connected in NINA. Version: " + String.Format(CultureInfo.InvariantCulture, "{0}.{1}", version.Major, version.Minor);
                 tl.LogMessage("DriverInfo Get", driverInfo);
                 return driverInfo;
             }
@@ -251,7 +268,7 @@ namespace ASCOM.SBIGTracker {
 
         public string Name {
             get {
-                string name = "Short driver name - please customise";
+                string name = "NINA Legacy SBIG Tracker CCD";
                 tl.LogMessage("Name Get", name);
                 return name;
             }
@@ -261,422 +278,641 @@ namespace ASCOM.SBIGTracker {
 
         #region ICamera Implementation
 
-        private const int ccdWidth = 1394; // Constants to define the CCD pixel dimensions
-        private const int ccdHeight = 1040;
-        private const double pixelSize = 6.45; // Constant for the pixel physical dimension
-
-        private int cameraNumX = ccdWidth; // Initialise variables to hold values required for functionality tested by Conform
-        private int cameraNumY = ccdHeight;
-        private int cameraStartX = 0;
-        private int cameraStartY = 0;
-        private DateTime exposureStart = DateTime.MinValue;
-        private double cameraLastExposureDuration = 0.0;
-        private bool cameraImageReady = false;
-        private int[,] cameraImageArray;
-        private object[,] cameraImageArrayVariant;
-
         public void AbortExposure() {
-            tl.LogMessage("AbortExposure", "Not implemented");
-            throw new MethodNotImplementedException("AbortExposure");
+            CheckConnected("Not connected");
+            rpcClient.AbortExposure(EMPTY_ARGS, deadline: GetDeadline());
         }
 
         public short BayerOffsetX {
             get {
-                tl.LogMessage("BayerOffsetX Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("BayerOffsetX", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.BayerOffsetX_get(EMPTY_ARGS, deadline: GetDeadline()).Value;
+                tl.LogMessage("BayerOffsetX Get", value.ToString());
+                return checked((short)value);
             }
         }
 
         public short BayerOffsetY {
             get {
-                tl.LogMessage("BayerOffsetY Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("BayerOffsetX", true);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.BayerOffsetY_get(EMPTY_ARGS, deadline: GetDeadline()).Value;
+                tl.LogMessage("BayerOffsetY Get", value.ToString());
+                return checked((short)value);
             }
         }
 
         public short BinX {
             get {
-                tl.LogMessage("BinX Get", "1");
-                return 1;
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.BinX_get(EMPTY_ARGS, deadline: GetDeadline()).Value;
+                tl.LogMessage("BinX Get", value.ToString());
+                return checked((short)value);
             }
             set {
+                CheckConnected("Not connected");
                 tl.LogMessage("BinX Set", value.ToString());
-                if (value != 1) throw new ASCOM.InvalidValueException("BinX", value.ToString(), "1"); // Only 1 is valid in this simple template
+                rpcClient.BinX_set(new SetShortPropertyRequest() { Value = value }, deadline: GetDeadline());
             }
         }
 
         public short BinY {
             get {
-                tl.LogMessage("BinY Get", "1");
-                return 1;
+                if (!IsConnected) {
+                    return -1;
+                }
+                var value = rpcClient.BinY_get(EMPTY_ARGS, deadline: GetDeadline()).Value;
+                tl.LogMessage("BinY Get", value.ToString());
+                return checked((short)value);
             }
             set {
+                CheckConnected("Not connected");
                 tl.LogMessage("BinY Set", value.ToString());
-                if (value != 1) throw new ASCOM.InvalidValueException("BinY", value.ToString(), "1"); // Only 1 is valid in this simple template
+                rpcClient.BinY_set(new SetShortPropertyRequest() { Value = value }, deadline: GetDeadline());
             }
         }
 
         public double CCDTemperature {
             get {
-                tl.LogMessage("CCDTemperature Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("CCDTemperature", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+                return rpcClient.CCDTemperature_get(EMPTY_ARGS, deadline: GetDeadline()).Value;
             }
         }
 
-        public CameraStates CameraState {
+        public DeviceInterface.CameraStates CameraState {
             get {
-                tl.LogMessage("CameraState Get", CameraStates.cameraIdle.ToString());
-                return CameraStates.cameraIdle;
+                if (!IsConnected) {
+                    return DeviceInterface.CameraStates.cameraError;
+                }
+
+                var value = rpcClient.CameraState_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("CameraState Get", value.Value.ToString());
+                return (DeviceInterface.CameraStates)value.Value;
             }
         }
 
         public int CameraXSize {
             get {
-                tl.LogMessage("CameraXSize Get", ccdWidth.ToString());
-                return ccdWidth;
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.CameraXSize_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("CameraXSize Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public int CameraYSize {
             get {
-                tl.LogMessage("CameraYSize Get", ccdHeight.ToString());
-                return ccdHeight;
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.CameraYSize_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("CameraYSize Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public bool CanAbortExposure {
             get {
-                tl.LogMessage("CanAbortExposure Get", false.ToString());
-                return false;
+                if (!IsConnected) {
+                    return false;
+                }
+
+                var value = rpcClient.CanAbortExposure_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("CanAbortExposure Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public bool CanAsymmetricBin {
             get {
-                tl.LogMessage("CanAsymmetricBin Get", false.ToString());
-                return false;
+                if (!IsConnected) {
+                    return false;
+                }
+
+                var value = rpcClient.CanAsymmetricBin_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("CanAsymmetricBin Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public bool CanFastReadout {
             get {
-                tl.LogMessage("CanFastReadout Get", false.ToString());
-                return false;
+                if (!IsConnected) {
+                    return false;
+                }
+
+                var value = rpcClient.CanFastReadout_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("CanFastReadout Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public bool CanGetCoolerPower {
             get {
-                tl.LogMessage("CanGetCoolerPower Get", false.ToString());
-                return false;
+                if (!IsConnected) {
+                    return false;
+                }
+
+                var value = rpcClient.CanGetCoolerPower_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("CanGetCoolerPower Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public bool CanPulseGuide {
             get {
-                tl.LogMessage("CanPulseGuide Get", false.ToString());
-                return false;
+                if (!IsConnected) {
+                    return false;
+                }
+
+                var value = rpcClient.CanPulseGuide_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("CanPulseGuide Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public bool CanSetCCDTemperature {
             get {
-                tl.LogMessage("CanSetCCDTemperature Get", false.ToString());
-                return false;
+                if (!IsConnected) {
+                    return false;
+                }
+
+                var value = rpcClient.CanSetCCDTemperature_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("CanSetCCDTemperature Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public bool CanStopExposure {
             get {
-                tl.LogMessage("CanStopExposure Get", false.ToString());
-                return false;
+                if (!IsConnected) {
+                    return false;
+                }
+
+                var value = rpcClient.CanStopExposure_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("CanStopExposure Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public bool CoolerOn {
             get {
-                tl.LogMessage("CoolerOn Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("CoolerOn", false);
+                if (!IsConnected) {
+                    return false;
+                }
+
+                var value = rpcClient.CoolerOn_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("CoolerOn Get", value.Value.ToString());
+                return value.Value;
             }
             set {
-                tl.LogMessage("CoolerOn Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("CoolerOn", true);
+                CheckConnected("Not connected");
+                tl.LogMessage("CoolerOn Set", value.ToString());
+                rpcClient.CoolerOn_set(new SetBoolPropertyRequest() { Value = value }, deadline: GetDeadline());
             }
         }
 
         public double CoolerPower {
             get {
-                tl.LogMessage("CoolerPower Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("CoolerPower", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.CoolerPower_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("CoolerPower Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public double ElectronsPerADU {
             get {
-                tl.LogMessage("ElectronsPerADU Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("ElectronsPerADU", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.ElectronsPerADU_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("ElectronsPerADU Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public double ExposureMax {
             get {
-                tl.LogMessage("ExposureMax Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("ExposureMax", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.ExposureMax_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("ExposureMax Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public double ExposureMin {
             get {
-                tl.LogMessage("ExposureMin Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("ExposureMin", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.ExposureMin_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("ExposureMin Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public double ExposureResolution {
             get {
-                tl.LogMessage("ExposureResolution Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("ExposureResolution", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.ExposureResolution_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("ExposureResolution Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public bool FastReadout {
             get {
-                tl.LogMessage("FastReadout Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("FastReadout", false);
+                if (!IsConnected) {
+                    return false;
+                }
+
+                var value = rpcClient.FastReadout_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("FastReadout Get", value.Value.ToString());
+                return value.Value;
             }
             set {
-                tl.LogMessage("FastReadout Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("FastReadout", true);
+                CheckConnected("Not connected");
+                tl.LogMessage("FastReadout Set", value.ToString());
+                rpcClient.FastReadout_set(new SetBoolPropertyRequest() { Value = value }, deadline: GetDeadline());
             }
         }
 
         public double FullWellCapacity {
             get {
-                tl.LogMessage("FullWellCapacity Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("FullWellCapacity", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.FullWellCapacity_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("FullWellCapacity Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public short Gain {
             get {
-                tl.LogMessage("Gain Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("Gain", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.Gain_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("Gain Get", value.Value.ToString());
+                return checked((short)value.Value);
             }
             set {
-                tl.LogMessage("Gain Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("Gain", true);
+                CheckConnected("Not connected");
+                tl.LogMessage("Gain Set", value.ToString());
+                rpcClient.Gain_set(new SetShortPropertyRequest() { Value = value }, deadline: GetDeadline());
             }
         }
 
         public short GainMax {
             get {
-                tl.LogMessage("GainMax Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("GainMax", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.GainMax_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("GainMax Get", value.Value.ToString());
+                return checked((short)value.Value);
             }
         }
 
         public short GainMin {
             get {
-                tl.LogMessage("GainMin Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("GainMin", true);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.GainMin_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("GainMin Get", value.Value.ToString());
+                return checked((short)value.Value);
             }
         }
 
         public ArrayList Gains {
             get {
-                tl.LogMessage("Gains Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("Gains", true);
+                if (!IsConnected) {
+                    return new ArrayList();
+                }
+
+                var value = rpcClient.Gains_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("Gains Get", value.Value.ToString());
+                return new ArrayList(value.Value);
             }
         }
 
         public bool HasShutter {
             get {
-                tl.LogMessage("HasShutter Get", false.ToString());
-                return false;
+                if (!IsConnected) {
+                    return false;
+                }
+
+                var value = rpcClient.HasShutter_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("HasShutter Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public double HeatSinkTemperature {
             get {
-                tl.LogMessage("HeatSinkTemperature Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("HeatSinkTemperature", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.HeatSinkTemperature_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("HeatSinkTemperature Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public object ImageArray {
             get {
-                if (!cameraImageReady) {
-                    tl.LogMessage("ImageArray Get", "Throwing InvalidOperationException because of a call to ImageArray before the first image has been taken!");
-                    throw new ASCOM.InvalidOperationException("Call to ImageArray before the first image has been taken!");
-                }
+                CheckConnected("Not connected");
 
-                cameraImageArray = new int[cameraNumX, cameraNumY];
+                var value = rpcClient.ImageArray_get(EMPTY_ARGS, deadline: GetDeadline());
+                var byteData = new byte[value.Data.Length];
+                value.Data.CopyTo(byteData, 0);
+                var imageData = new ushort[value.Width * value.Height];
+                Buffer.BlockCopy(byteData, 0, imageData, 0, value.Data.Length);
+                var cameraImageArray = new int[value.Width, value.Height];
+                for (int y = 0; y < value.Height; ++y) {
+                    for (int x = 0; x < value.Width; ++x) {
+                        cameraImageArray[x, y] = imageData[x * value.Height + y];
+                    }
+                }
                 return cameraImageArray;
             }
         }
 
         public object ImageArrayVariant {
             get {
-                if (!cameraImageReady) {
-                    tl.LogMessage("ImageArrayVariant Get", "Throwing InvalidOperationException because of a call to ImageArrayVariant before the first image has been taken!");
-                    throw new ASCOM.InvalidOperationException("Call to ImageArrayVariant before the first image has been taken!");
-                }
-                cameraImageArrayVariant = new object[cameraNumX, cameraNumY];
-                for (int i = 0; i < cameraImageArray.GetLength(1); i++) {
-                    for (int j = 0; j < cameraImageArray.GetLength(0); j++) {
-                        cameraImageArrayVariant[j, i] = cameraImageArray[j, i];
+                CheckConnected("Not connected");
+
+                var value = rpcClient.ImageArray_get(EMPTY_ARGS, deadline: GetDeadline());
+                var byteData = new byte[value.Data.Length];
+                value.Data.CopyTo(byteData, 0);
+                var imageData = new ushort[value.Width * value.Height];
+                Buffer.BlockCopy(byteData, 0, imageData, 0, value.Data.Length);
+                var cameraImageArrayVariant = new object[value.Width, value.Height];
+                for (int y = 0; y < value.Height; ++y) {
+                    for (int x = 0; x < value.Width; ++x) {
+                        cameraImageArrayVariant[x, y] = imageData[x * value.Height + y];
                     }
-
                 }
-
                 return cameraImageArrayVariant;
             }
         }
 
         public bool ImageReady {
             get {
-                tl.LogMessage("ImageReady Get", cameraImageReady.ToString());
-                return cameraImageReady;
+                if (!IsConnected) {
+                    return false;
+                }
+
+                var value = rpcClient.ImageReady_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("ImageReady Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public bool IsPulseGuiding {
             get {
-                tl.LogMessage("IsPulseGuiding Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("IsPulseGuiding", false);
+                if (!IsConnected) {
+                    return false;
+                }
+
+                var value = rpcClient.IsPulseGuiding_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("IsPulseGuiding Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public double LastExposureDuration {
             get {
-                if (!cameraImageReady) {
-                    tl.LogMessage("LastExposureDuration Get", "Throwing InvalidOperationException because of a call to LastExposureDuration before the first image has been taken!");
-                    throw new ASCOM.InvalidOperationException("Call to LastExposureDuration before the first image has been taken!");
+                if (!IsConnected) {
+                    return -1;
                 }
-                tl.LogMessage("LastExposureDuration Get", cameraLastExposureDuration.ToString());
-                return cameraLastExposureDuration;
+
+                var value = rpcClient.LastExposureDuration_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("LastExposureDuration Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public string LastExposureStartTime {
             get {
-                if (!cameraImageReady) {
-                    tl.LogMessage("LastExposureStartTime Get", "Throwing InvalidOperationException because of a call to LastExposureStartTime before the first image has been taken!");
-                    throw new ASCOM.InvalidOperationException("Call to LastExposureStartTime before the first image has been taken!");
+                if (!IsConnected) {
+                    return "";
                 }
-                string exposureStartString = exposureStart.ToString("yyyy-MM-ddTHH:mm:ss");
-                tl.LogMessage("LastExposureStartTime Get", exposureStartString.ToString());
-                return exposureStartString;
+
+                var value = rpcClient.LastExposureStartTime_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("LastExposureStartTime Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public int MaxADU {
             get {
-                tl.LogMessage("MaxADU Get", "20000");
-                return 20000;
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.MaxADU_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("MaxADU Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public short MaxBinX {
             get {
-                tl.LogMessage("MaxBinX Get", "1");
-                return 1;
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.MaxBinX_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("MaxBinX Get", value.Value.ToString());
+                return checked((short)value.Value);
             }
         }
 
         public short MaxBinY {
             get {
-                tl.LogMessage("MaxBinY Get", "1");
-                return 1;
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.MaxBinY_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("MaxBinY Get", value.Value.ToString());
+                return checked((short)value.Value);
             }
         }
 
         public int NumX {
             get {
-                tl.LogMessage("NumX Get", cameraNumX.ToString());
-                return cameraNumX;
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.NumX_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("NumX Get", value.Value.ToString());
+                return value.Value;
             }
             set {
-                cameraNumX = value;
-                tl.LogMessage("NumX set", value.ToString());
+                CheckConnected("Not connected");
+                tl.LogMessage("NumX Set", value.ToString());
+                rpcClient.NumX_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline());
             }
         }
 
         public int NumY {
             get {
-                tl.LogMessage("NumY Get", cameraNumY.ToString());
-                return cameraNumY;
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.NumY_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("NumY Get", value.Value.ToString());
+                return value.Value;
             }
             set {
-                cameraNumY = value;
-                tl.LogMessage("NumY set", value.ToString());
+                CheckConnected("Not connected");
+                tl.LogMessage("NumY Set", value.ToString());
+                rpcClient.NumY_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline());
             }
         }
 
         public int Offset {
             get {
-                tl.LogMessage("Offset Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("Offset", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.Offset_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("Offset Get", value.Value.ToString());
+                return value.Value;
             }
             set {
-                tl.LogMessage("Offset Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("Offset", true);
+                CheckConnected("Not connected");
+                tl.LogMessage("Offset Set", value.ToString());
+                rpcClient.Offset_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline());
             }
         }
 
         public int OffsetMax {
             get {
-                tl.LogMessage("OffsetMax Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("OffsetMax", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.OffsetMax_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("OffsetMax Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public int OffsetMin {
             get {
-                tl.LogMessage("OffsetMin Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("OffsetMin", true);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.OffsetMin_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("OffsetMin Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public ArrayList Offsets {
             get {
-                tl.LogMessage("Offsets Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("Offsets", true);
+                if (!IsConnected) {
+                    return new ArrayList();
+                }
+
+                var value = rpcClient.Offsets_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("Offsets Get", value.Value.ToString());
+                return new ArrayList(value.Value);
             }
         }
 
         public short PercentCompleted {
             get {
-                tl.LogMessage("PercentCompleted Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("PercentCompleted", false);
+                if (!IsConnected) {
+                    return 0;
+                }
+
+                var value = rpcClient.PercentCompleted_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("PercentCompleted Get", value.Value.ToString());
+                return checked((short)value.Value);
             }
         }
 
         public double PixelSizeX {
             get {
-                tl.LogMessage("PixelSizeX Get", pixelSize.ToString());
-                return pixelSize;
+                if (!IsConnected) {
+                    return 0;
+                }
+
+                var value = rpcClient.PixelSizeX_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("PixelSizeX Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public double PixelSizeY {
             get {
-                tl.LogMessage("PixelSizeY Get", pixelSize.ToString());
-                return pixelSize;
+                if (!IsConnected) {
+                    return 0;
+                }
+
+                var value = rpcClient.PixelSizeY_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("PixelSizeY Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
         public void PulseGuide(GuideDirections Direction, int Duration) {
-            tl.LogMessage("PulseGuide", "Not implemented");
             throw new ASCOM.MethodNotImplementedException("PulseGuide");
         }
 
         public short ReadoutMode {
             get {
-                tl.LogMessage("ReadoutMode Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("ReadoutMode", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.ReadoutMode_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("ReadoutMode Get", value.Value.ToString());
+                return checked((short)value.Value);
             }
             set {
+                CheckConnected("Not connected");
                 tl.LogMessage("ReadoutMode Set", "Not implemented");
                 throw new ASCOM.PropertyNotImplementedException("ReadoutMode", true);
             }
@@ -684,85 +920,114 @@ namespace ASCOM.SBIGTracker {
 
         public ArrayList ReadoutModes {
             get {
-                tl.LogMessage("ReadoutModes Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("ReadoutModes", false);
+                if (!IsConnected) {
+                    return new ArrayList();
+                }
+
+                var value = rpcClient.ReadoutModes_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("ReadoutModes Get", value.Value.ToString());
+                return new ArrayList(value.Value);
             }
         }
 
         public string SensorName {
             get {
-                tl.LogMessage("SensorName Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SensorName", false);
+                CheckConnected("Not connected");
+
+                var value = rpcClient.SensorName_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("SensorName Get", value.Value.ToString());
+                return value.Value;
             }
         }
 
-        public SensorType SensorType {
+        public DeviceInterface.SensorType SensorType {
             get {
-                tl.LogMessage("SensorType Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SensorType", false);
+                CheckConnected("Not connected");
+
+                var value = rpcClient.SensorType_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("SensorType Get", value.Value.ToString());
+                return (DeviceInterface.SensorType)value.Value;
             }
         }
 
         public double SetCCDTemperature {
             get {
-                tl.LogMessage("SetCCDTemperature Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SetCCDTemperature", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.SetCCDTemperature_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("SetCCDTemperature Get", value.Value.ToString());
+                return value.Value;
             }
             set {
-                tl.LogMessage("SetCCDTemperature Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SetCCDTemperature", true);
+                CheckConnected("Not connected");
+                tl.LogMessage("SetCCDTemperature Set", value.ToString());
+                rpcClient.SetCCDTemperature_set(new SetDoublePropertyRequest() { Value = value }, deadline: GetDeadline());
             }
         }
 
         public void StartExposure(double Duration, bool Light) {
-            if (Duration < 0.0) throw new InvalidValueException("StartExposure", Duration.ToString(), "0.0 upwards");
-            if (cameraNumX > ccdWidth) throw new InvalidValueException("StartExposure", cameraNumX.ToString(), ccdWidth.ToString());
-            if (cameraNumY > ccdHeight) throw new InvalidValueException("StartExposure", cameraNumY.ToString(), ccdHeight.ToString());
-            if (cameraStartX > ccdWidth) throw new InvalidValueException("StartExposure", cameraStartX.ToString(), ccdWidth.ToString());
-            if (cameraStartY > ccdHeight) throw new InvalidValueException("StartExposure", cameraStartY.ToString(), ccdHeight.ToString());
-
-            cameraLastExposureDuration = Duration;
-            exposureStart = DateTime.Now;
-            System.Threading.Thread.Sleep((int)Duration * 1000);  // Sleep for the duration to simulate exposure 
-            tl.LogMessage("StartExposure", Duration.ToString() + " " + Light.ToString());
-            cameraImageReady = true;
+            CheckConnected("Not connected");
+            rpcClient.StartExposure(new StartExposureRequest() {
+                Duration = Duration,
+                Light = Light
+            }, deadline: GetDeadline());
         }
 
         public int StartX {
             get {
-                tl.LogMessage("StartX Get", cameraStartX.ToString());
-                return cameraStartX;
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.StartX_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("StartX Get", value.Value.ToString());
+                return value.Value;
             }
             set {
-                cameraStartX = value;
+                CheckConnected("Not connected");
                 tl.LogMessage("StartX Set", value.ToString());
+                rpcClient.StartX_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline());
             }
         }
 
         public int StartY {
             get {
-                tl.LogMessage("StartY Get", cameraStartY.ToString());
-                return cameraStartY;
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.StartY_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("StartY Get", value.Value.ToString());
+                return value.Value;
             }
             set {
-                cameraStartY = value;
-                tl.LogMessage("StartY set", value.ToString());
+                CheckConnected("Not connected");
+                tl.LogMessage("StartY Set", value.ToString());
+                rpcClient.StartY_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline());
             }
         }
 
         public void StopExposure() {
-            tl.LogMessage("StopExposure", "Not implemented");
-            throw new MethodNotImplementedException("StopExposure");
+            CheckConnected("Not connected");
+            rpcClient.StopExposure(EMPTY_ARGS, deadline: GetDeadline());
         }
 
         public double SubExposureDuration {
             get {
-                tl.LogMessage("SubExposureDuration Get", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SubExposureDuration", false);
+                if (!IsConnected) {
+                    return -1;
+                }
+
+                var value = rpcClient.SubExposureDuration_get(EMPTY_ARGS, deadline: GetDeadline());
+                tl.LogMessage("SubExposureDuration Get", value.Value.ToString());
+                return value.Value;
             }
             set {
-                tl.LogMessage("SubExposureDuration Set", "Not implemented");
-                throw new ASCOM.PropertyNotImplementedException("SubExposureDuration", true);
+                CheckConnected("Not connected");
+                tl.LogMessage("SubExposureDuration Set", value.ToString());
+                rpcClient.SubExposureDuration_set(new SetDoublePropertyRequest() { Value = value }, deadline: GetDeadline());
             }
         }
 
@@ -844,7 +1109,6 @@ namespace ASCOM.SBIGTracker {
         /// </summary>
         private bool IsConnected {
             get {
-                // TODO check that the driver hardware connection exists and is connected to the hardware
                 return connectedState;
             }
         }
@@ -866,7 +1130,12 @@ namespace ASCOM.SBIGTracker {
             using (Profile driverProfile = new Profile()) {
                 driverProfile.DeviceType = "Camera";
                 tl.Enabled = Convert.ToBoolean(driverProfile.GetValue(driverID, traceStateProfileName, string.Empty, traceStateDefault));
-                comPort = driverProfile.GetValue(driverID, comPortProfileName, string.Empty, comPortDefault);
+                serverPipeName = driverProfile.GetValue(driverID, serverPipeNameProfileName, string.Empty, serverPipeNameDefault);
+                var rpcTimeoutSecondsString = driverProfile.GetValue(driverID, rpcTimeoutSecondsProfileName, string.Empty, rpcTimeoutSecondsDefault);
+                if (!int.TryParse(rpcTimeoutSecondsString, out rpcTimeoutSeconds)) {
+                    // Deal with profile corruption by reverting to the default
+                    rpcTimeoutSeconds = int.Parse(rpcTimeoutSecondsDefault);
+                }
             }
         }
 
@@ -877,7 +1146,8 @@ namespace ASCOM.SBIGTracker {
             using (Profile driverProfile = new Profile()) {
                 driverProfile.DeviceType = "Camera";
                 driverProfile.WriteValue(driverID, traceStateProfileName, tl.Enabled.ToString());
-                driverProfile.WriteValue(driverID, comPortProfileName, comPort.ToString());
+                driverProfile.WriteValue(driverID, serverPipeNameProfileName, serverPipeName);
+                driverProfile.WriteValue(driverID, rpcTimeoutSecondsProfileName, rpcTimeoutSeconds.ToString());
             }
         }
 

@@ -6,9 +6,9 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows.Forms;
 using ASCOM.Utilities;
-using ASCOM.SBIGTracker;
+using ASCOM.NINA.SBIGTracker;
 
-namespace ASCOM.SBIGTracker {
+namespace ASCOM.NINA.SBIGTracker {
     [ComVisible(false)]					// Form not registered for COM!
     public partial class SetupDialogForm : Form {
         TraceLogger tl; // Holder for a reference to the driver's trace logger
@@ -25,10 +25,9 @@ namespace ASCOM.SBIGTracker {
 
         private void cmdOK_Click(object sender, EventArgs e) // OK button event handler
         {
-            // Place any validation constraint checks here
-            // Update the state variables with results from the dialogue
-            Camera.comPort = (string)comboBoxComPort.SelectedItem;
             tl.Enabled = chkTrace.Checked;
+            Camera.rpcTimeoutSeconds = int.Parse(rpcTimeoutTextBox.Text.Trim());
+            Camera.serverPipeName = serverPipeNameTextBox.Text.Trim();
         }
 
         private void cmdCancel_Click(object sender, EventArgs e) // Cancel button event handler
@@ -50,12 +49,31 @@ namespace ASCOM.SBIGTracker {
 
         private void InitUI() {
             chkTrace.Checked = tl.Enabled;
-            // set the list of com ports to those that are currently available
-            comboBoxComPort.Items.Clear();
-            comboBoxComPort.Items.AddRange(System.IO.Ports.SerialPort.GetPortNames());      // use System.IO because it's static
-            // select the current port if possible
-            if (comboBoxComPort.Items.Contains(Camera.comPort)) {
-                comboBoxComPort.SelectedItem = Camera.comPort;
+
+            serverPipeNameTextBox.Text = Camera.serverPipeName;
+            rpcTimeoutTextBox.Text = Camera.rpcTimeoutSeconds.ToString();
+            serverPipeNameTextBox.Validating += ServerPipeNameTextBox_Validating;
+            rpcTimeoutTextBox.Validating += RpcTimeoutTextBox_Validating;
+        }
+
+        private void ServerPipeNameTextBox_Validating(object sender, CancelEventArgs e) {
+            if (string.IsNullOrWhiteSpace(serverPipeNameTextBox.Text)) {
+                e.Cancel = true;
+                validationErrorProvider.SetError(serverPipeNameTextBox, "Input cannot be blank or only whitespace");
+            } else {
+                e.Cancel = false;
+                validationErrorProvider.SetError(serverPipeNameTextBox, "");
+            }
+        }
+
+        private void RpcTimeoutTextBox_Validating(object sender, CancelEventArgs e) {
+            int dummy;
+            if (!int.TryParse(rpcTimeoutTextBox.Text.Trim(), out dummy) || dummy <= 0) {
+                e.Cancel = true;
+                validationErrorProvider.SetError(rpcTimeoutTextBox, "RPC timeout must be a positive integer");
+            } else {
+                e.Cancel = false;
+                validationErrorProvider.SetError(rpcTimeoutTextBox, "");
             }
         }
     }
