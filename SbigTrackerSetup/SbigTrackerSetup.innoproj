@@ -22,5 +22,12 @@
     <Compile Include="InstallScript.iss">
     </Compile>
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\nina.ascom.sbig.tracker\nina.ascom.sbig.tracker.csproj">
+      <Name>nina.ascom.sbig.tracker</Name>
+      <Project>{64308775-bd4a-469c-bcab-3ed830b811af}</Project>
+      <Private>True</Private>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\InnoSetupTools\InnoSetupProject.targets" />
 </Project>

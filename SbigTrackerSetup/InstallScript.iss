@@ -1,8 +1,8 @@
 [Setup]
 AppID={{6c6d8287-1918-4a91-a8c6-983695b20ddf}
 AppName=NINA SBIGTracker ASCOM Camera Driver
-AppVerName=NINA SBIGTracker ASCOM Camera Driver 0.1
-AppVersion=0.1
+AppVerName=NINA SBIGTracker ASCOM Camera Driver 0.2
+AppVersion=0.2
 AppPublisher=George Hilios <ghilios@gmail.com>
 AppPublisherURL=mailto:ghilios@gmail.com
 AppSupportURL=https://discord.com/invite/rWRbVbw
@@ -50,7 +50,6 @@ Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\ASCOM.NINA.S
 
 [UninstallRun]
 Filename: "{dotnet4032}\regasm.exe"; Parameters: "-u ""{app}\ASCOM.NINA.SBIGTracker.Camera.dll"""; Flags: runhidden 32bit
-Filename: "{dotnet4064}\regasm.exe"; Parameters: "/codebase ""{app}\ASCOM.NINA.SBIGTracker.Camera.dll"""; Flags: runhidden 64bit; Check: IsWin64
 Filename: "{dotnet4064}\regasm.exe"; Parameters: "-u ""{app}\ASCOM.NINA.SBIGTracker.Camera.dll"""; Flags: runhidden 64bit; Check: IsWin64
 
 [Code]

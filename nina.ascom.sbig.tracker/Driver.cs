@@ -30,6 +30,7 @@ using System.Globalization;
 using System.Collections;
 using GrpcDotNetNamedPipes;
 using NINA.Core.API.ASCOM.Camera;
+using System.Threading;
 
 namespace ASCOM.NINA.SBIGTracker {
     //
@@ -93,6 +94,8 @@ namespace ASCOM.NINA.SBIGTracker {
         /// </summary>
         internal TraceLogger tl;
 
+        private CancellationTokenSource cts;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="SBIGTracker"/> class.
         /// Must be public for COM registration.
@@ -106,12 +109,13 @@ namespace ASCOM.NINA.SBIGTracker {
             connectedState = false; // Initialise connected to false
             utilities = new Util(); //Initialise util object
             astroUtilities = new AstroUtils(); // Initialise astro-utilities object
+            cts = new CancellationTokenSource();
 
             tl.LogMessage("Camera", "Completed initialisation");
         }
 
-        public DateTime GetDeadline() {
-            return DateTime.Now + TimeSpan.FromSeconds(rpcTimeoutSeconds);
+        public DateTime? GetDeadline() {
+            return DateTime.UtcNow + TimeSpan.FromSeconds(rpcTimeoutSeconds);
         }
 
 
@@ -218,7 +222,7 @@ namespace ASCOM.NINA.SBIGTracker {
 
         private void HeartbeatTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e) {
             try {
-                rpcClient?.CameraXSize_get(EMPTY_ARGS, deadline: GetDeadline());
+                rpcClient?.CameraXSize_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
             } catch (Exception) {
                 tl.LogMessage("IsConnected", "RPC heartbeat failed. Assuming server disconnected");
                 Disconnect();
@@ -230,6 +234,10 @@ namespace ASCOM.NINA.SBIGTracker {
             heartbeatTimer?.Stop();
             heartbeatTimer?.Dispose();
             heartbeatTimer = null;
+            var oldCts = cts;
+            cts = new CancellationTokenSource();
+            oldCts?.Cancel();
+            oldCts?.Dispose();
             LogMessage("Connected Set", "Disconnecting from pipe {0}", serverPipeName);
         }
 
@@ -280,7 +288,7 @@ namespace ASCOM.NINA.SBIGTracker {
 
         public void AbortExposure() {
             CheckConnected("Not connected");
-            rpcClient.AbortExposure(EMPTY_ARGS, deadline: GetDeadline());
+            rpcClient.AbortExposure(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
         }
 
         public short BayerOffsetX {
@@ -289,7 +297,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.BayerOffsetX_get(EMPTY_ARGS, deadline: GetDeadline()).Value;
+                var value = rpcClient.BayerOffsetX_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token).Value;
                 tl.LogMessage("BayerOffsetX Get", value.ToString());
                 return checked((short)value);
             }
@@ -301,7 +309,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.BayerOffsetY_get(EMPTY_ARGS, deadline: GetDeadline()).Value;
+                var value = rpcClient.BayerOffsetY_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token).Value;
                 tl.LogMessage("BayerOffsetY Get", value.ToString());
                 return checked((short)value);
             }
@@ -313,14 +321,14 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.BinX_get(EMPTY_ARGS, deadline: GetDeadline()).Value;
+                var value = rpcClient.BinX_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token).Value;
                 tl.LogMessage("BinX Get", value.ToString());
                 return checked((short)value);
             }
             set {
                 CheckConnected("Not connected");
                 tl.LogMessage("BinX Set", value.ToString());
-                rpcClient.BinX_set(new SetShortPropertyRequest() { Value = value }, deadline: GetDeadline());
+                rpcClient.BinX_set(new SetShortPropertyRequest() { Value = value }, deadline: GetDeadline(), cancellationToken: cts.Token);
             }
         }
 
@@ -329,14 +337,14 @@ namespace ASCOM.NINA.SBIGTracker {
                 if (!IsConnected) {
                     return -1;
                 }
-                var value = rpcClient.BinY_get(EMPTY_ARGS, deadline: GetDeadline()).Value;
+                var value = rpcClient.BinY_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token).Value;
                 tl.LogMessage("BinY Get", value.ToString());
                 return checked((short)value);
             }
             set {
                 CheckConnected("Not connected");
                 tl.LogMessage("BinY Set", value.ToString());
-                rpcClient.BinY_set(new SetShortPropertyRequest() { Value = value }, deadline: GetDeadline());
+                rpcClient.BinY_set(new SetShortPropertyRequest() { Value = value }, deadline: GetDeadline(), cancellationToken: cts.Token);
             }
         }
 
@@ -345,7 +353,7 @@ namespace ASCOM.NINA.SBIGTracker {
                 if (!IsConnected) {
                     return -1;
                 }
-                return rpcClient.CCDTemperature_get(EMPTY_ARGS, deadline: GetDeadline()).Value;
+                return rpcClient.CCDTemperature_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token).Value;
             }
         }
 
@@ -355,7 +363,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return DeviceInterface.CameraStates.cameraError;
                 }
 
-                var value = rpcClient.CameraState_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.CameraState_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("CameraState Get", value.Value.ToString());
                 return (DeviceInterface.CameraStates)value.Value;
             }
@@ -367,7 +375,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.CameraXSize_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.CameraXSize_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("CameraXSize Get", value.Value.ToString());
                 return value.Value;
             }
@@ -379,7 +387,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.CameraYSize_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.CameraYSize_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("CameraYSize Get", value.Value.ToString());
                 return value.Value;
             }
@@ -391,7 +399,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return false;
                 }
 
-                var value = rpcClient.CanAbortExposure_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.CanAbortExposure_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("CanAbortExposure Get", value.Value.ToString());
                 return value.Value;
             }
@@ -403,7 +411,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return false;
                 }
 
-                var value = rpcClient.CanAsymmetricBin_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.CanAsymmetricBin_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("CanAsymmetricBin Get", value.Value.ToString());
                 return value.Value;
             }
@@ -415,7 +423,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return false;
                 }
 
-                var value = rpcClient.CanFastReadout_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.CanFastReadout_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("CanFastReadout Get", value.Value.ToString());
                 return value.Value;
             }
@@ -427,7 +435,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return false;
                 }
 
-                var value = rpcClient.CanGetCoolerPower_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.CanGetCoolerPower_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("CanGetCoolerPower Get", value.Value.ToString());
                 return value.Value;
             }
@@ -439,7 +447,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return false;
                 }
 
-                var value = rpcClient.CanPulseGuide_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.CanPulseGuide_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("CanPulseGuide Get", value.Value.ToString());
                 return value.Value;
             }
@@ -451,7 +459,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return false;
                 }
 
-                var value = rpcClient.CanSetCCDTemperature_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.CanSetCCDTemperature_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("CanSetCCDTemperature Get", value.Value.ToString());
                 return value.Value;
             }
@@ -463,7 +471,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return false;
                 }
 
-                var value = rpcClient.CanStopExposure_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.CanStopExposure_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("CanStopExposure Get", value.Value.ToString());
                 return value.Value;
             }
@@ -475,14 +483,14 @@ namespace ASCOM.NINA.SBIGTracker {
                     return false;
                 }
 
-                var value = rpcClient.CoolerOn_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.CoolerOn_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("CoolerOn Get", value.Value.ToString());
                 return value.Value;
             }
             set {
                 CheckConnected("Not connected");
                 tl.LogMessage("CoolerOn Set", value.ToString());
-                rpcClient.CoolerOn_set(new SetBoolPropertyRequest() { Value = value }, deadline: GetDeadline());
+                rpcClient.CoolerOn_set(new SetBoolPropertyRequest() { Value = value }, deadline: GetDeadline(), cancellationToken: cts.Token);
             }
         }
 
@@ -492,7 +500,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.CoolerPower_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.CoolerPower_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("CoolerPower Get", value.Value.ToString());
                 return value.Value;
             }
@@ -504,7 +512,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.ElectronsPerADU_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.ElectronsPerADU_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("ElectronsPerADU Get", value.Value.ToString());
                 return value.Value;
             }
@@ -516,7 +524,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.ExposureMax_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.ExposureMax_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("ExposureMax Get", value.Value.ToString());
                 return value.Value;
             }
@@ -528,7 +536,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.ExposureMin_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.ExposureMin_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("ExposureMin Get", value.Value.ToString());
                 return value.Value;
             }
@@ -540,7 +548,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.ExposureResolution_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.ExposureResolution_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("ExposureResolution Get", value.Value.ToString());
                 return value.Value;
             }
@@ -552,14 +560,14 @@ namespace ASCOM.NINA.SBIGTracker {
                     return false;
                 }
 
-                var value = rpcClient.FastReadout_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.FastReadout_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("FastReadout Get", value.Value.ToString());
                 return value.Value;
             }
             set {
                 CheckConnected("Not connected");
                 tl.LogMessage("FastReadout Set", value.ToString());
-                rpcClient.FastReadout_set(new SetBoolPropertyRequest() { Value = value }, deadline: GetDeadline());
+                rpcClient.FastReadout_set(new SetBoolPropertyRequest() { Value = value }, deadline: GetDeadline(), cancellationToken: cts.Token);
             }
         }
 
@@ -569,7 +577,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.FullWellCapacity_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.FullWellCapacity_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("FullWellCapacity Get", value.Value.ToString());
                 return value.Value;
             }
@@ -581,14 +589,14 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.Gain_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.Gain_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("Gain Get", value.Value.ToString());
                 return checked((short)value.Value);
             }
             set {
                 CheckConnected("Not connected");
                 tl.LogMessage("Gain Set", value.ToString());
-                rpcClient.Gain_set(new SetShortPropertyRequest() { Value = value }, deadline: GetDeadline());
+                rpcClient.Gain_set(new SetShortPropertyRequest() { Value = value }, deadline: GetDeadline(), cancellationToken: cts.Token);
             }
         }
 
@@ -598,7 +606,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.GainMax_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.GainMax_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("GainMax Get", value.Value.ToString());
                 return checked((short)value.Value);
             }
@@ -610,7 +618,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.GainMin_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.GainMin_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("GainMin Get", value.Value.ToString());
                 return checked((short)value.Value);
             }
@@ -622,7 +630,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return new ArrayList();
                 }
 
-                var value = rpcClient.Gains_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.Gains_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("Gains Get", value.Value.ToString());
                 return new ArrayList(value.Value);
             }
@@ -634,7 +642,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return false;
                 }
 
-                var value = rpcClient.HasShutter_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.HasShutter_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("HasShutter Get", value.Value.ToString());
                 return value.Value;
             }
@@ -646,7 +654,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.HeatSinkTemperature_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.HeatSinkTemperature_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("HeatSinkTemperature Get", value.Value.ToString());
                 return value.Value;
             }
@@ -656,7 +664,7 @@ namespace ASCOM.NINA.SBIGTracker {
             get {
                 CheckConnected("Not connected");
 
-                var value = rpcClient.ImageArray_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.ImageArray_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 var byteData = new byte[value.Data.Length];
                 value.Data.CopyTo(byteData, 0);
                 var imageData = new ushort[value.Width * value.Height];
@@ -675,7 +683,7 @@ namespace ASCOM.NINA.SBIGTracker {
             get {
                 CheckConnected("Not connected");
 
-                var value = rpcClient.ImageArray_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.ImageArray_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 var byteData = new byte[value.Data.Length];
                 value.Data.CopyTo(byteData, 0);
                 var imageData = new ushort[value.Width * value.Height];
@@ -696,7 +704,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return false;
                 }
 
-                var value = rpcClient.ImageReady_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.ImageReady_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("ImageReady Get", value.Value.ToString());
                 return value.Value;
             }
@@ -708,7 +716,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return false;
                 }
 
-                var value = rpcClient.IsPulseGuiding_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.IsPulseGuiding_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("IsPulseGuiding Get", value.Value.ToString());
                 return value.Value;
             }
@@ -720,7 +728,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.LastExposureDuration_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.LastExposureDuration_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("LastExposureDuration Get", value.Value.ToString());
                 return value.Value;
             }
@@ -732,7 +740,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return "";
                 }
 
-                var value = rpcClient.LastExposureStartTime_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.LastExposureStartTime_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("LastExposureStartTime Get", value.Value.ToString());
                 return value.Value;
             }
@@ -744,7 +752,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.MaxADU_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.MaxADU_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("MaxADU Get", value.Value.ToString());
                 return value.Value;
             }
@@ -756,7 +764,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.MaxBinX_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.MaxBinX_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("MaxBinX Get", value.Value.ToString());
                 return checked((short)value.Value);
             }
@@ -768,7 +776,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.MaxBinY_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.MaxBinY_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("MaxBinY Get", value.Value.ToString());
                 return checked((short)value.Value);
             }
@@ -780,14 +788,14 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.NumX_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.NumX_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("NumX Get", value.Value.ToString());
                 return value.Value;
             }
             set {
                 CheckConnected("Not connected");
                 tl.LogMessage("NumX Set", value.ToString());
-                rpcClient.NumX_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline());
+                rpcClient.NumX_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline(), cancellationToken: cts.Token);
             }
         }
 
@@ -797,14 +805,14 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.NumY_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.NumY_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("NumY Get", value.Value.ToString());
                 return value.Value;
             }
             set {
                 CheckConnected("Not connected");
                 tl.LogMessage("NumY Set", value.ToString());
-                rpcClient.NumY_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline());
+                rpcClient.NumY_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline(), cancellationToken: cts.Token);
             }
         }
 
@@ -814,14 +822,14 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.Offset_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.Offset_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("Offset Get", value.Value.ToString());
                 return value.Value;
             }
             set {
                 CheckConnected("Not connected");
                 tl.LogMessage("Offset Set", value.ToString());
-                rpcClient.Offset_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline());
+                rpcClient.Offset_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline(), cancellationToken: cts.Token);
             }
         }
 
@@ -831,7 +839,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.OffsetMax_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.OffsetMax_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("OffsetMax Get", value.Value.ToString());
                 return value.Value;
             }
@@ -843,7 +851,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.OffsetMin_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.OffsetMin_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("OffsetMin Get", value.Value.ToString());
                 return value.Value;
             }
@@ -855,7 +863,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return new ArrayList();
                 }
 
-                var value = rpcClient.Offsets_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.Offsets_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("Offsets Get", value.Value.ToString());
                 return new ArrayList(value.Value);
             }
@@ -867,7 +875,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return 0;
                 }
 
-                var value = rpcClient.PercentCompleted_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.PercentCompleted_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("PercentCompleted Get", value.Value.ToString());
                 return checked((short)value.Value);
             }
@@ -879,7 +887,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return 0;
                 }
 
-                var value = rpcClient.PixelSizeX_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.PixelSizeX_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("PixelSizeX Get", value.Value.ToString());
                 return value.Value;
             }
@@ -891,7 +899,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return 0;
                 }
 
-                var value = rpcClient.PixelSizeY_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.PixelSizeY_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("PixelSizeY Get", value.Value.ToString());
                 return value.Value;
             }
@@ -907,7 +915,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.ReadoutMode_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.ReadoutMode_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("ReadoutMode Get", value.Value.ToString());
                 return checked((short)value.Value);
             }
@@ -924,7 +932,7 @@ namespace ASCOM.NINA.SBIGTracker {
                     return new ArrayList();
                 }
 
-                var value = rpcClient.ReadoutModes_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.ReadoutModes_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("ReadoutModes Get", value.Value.ToString());
                 return new ArrayList(value.Value);
             }
@@ -934,7 +942,7 @@ namespace ASCOM.NINA.SBIGTracker {
             get {
                 CheckConnected("Not connected");
 
-                var value = rpcClient.SensorName_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.SensorName_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("SensorName Get", value.Value.ToString());
                 return value.Value;
             }
@@ -944,7 +952,7 @@ namespace ASCOM.NINA.SBIGTracker {
             get {
                 CheckConnected("Not connected");
 
-                var value = rpcClient.SensorType_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.SensorType_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("SensorType Get", value.Value.ToString());
                 return (DeviceInterface.SensorType)value.Value;
             }
@@ -956,14 +964,14 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.SetCCDTemperature_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.SetCCDTemperature_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("SetCCDTemperature Get", value.Value.ToString());
                 return value.Value;
             }
             set {
                 CheckConnected("Not connected");
                 tl.LogMessage("SetCCDTemperature Set", value.ToString());
-                rpcClient.SetCCDTemperature_set(new SetDoublePropertyRequest() { Value = value }, deadline: GetDeadline());
+                rpcClient.SetCCDTemperature_set(new SetDoublePropertyRequest() { Value = value }, deadline: GetDeadline(), cancellationToken: cts.Token);
             }
         }
 
@@ -972,7 +980,7 @@ namespace ASCOM.NINA.SBIGTracker {
             rpcClient.StartExposure(new StartExposureRequest() {
                 Duration = Duration,
                 Light = Light
-            }, deadline: GetDeadline());
+            }, deadline: GetDeadline(), cancellationToken: cts.Token);
         }
 
         public int StartX {
@@ -981,14 +989,14 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.StartX_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.StartX_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("StartX Get", value.Value.ToString());
                 return value.Value;
             }
             set {
                 CheckConnected("Not connected");
                 tl.LogMessage("StartX Set", value.ToString());
-                rpcClient.StartX_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline());
+                rpcClient.StartX_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline(), cancellationToken: cts.Token);
             }
         }
 
@@ -998,20 +1006,20 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.StartY_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.StartY_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("StartY Get", value.Value.ToString());
                 return value.Value;
             }
             set {
                 CheckConnected("Not connected");
                 tl.LogMessage("StartY Set", value.ToString());
-                rpcClient.StartY_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline());
+                rpcClient.StartY_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline(), cancellationToken: cts.Token);
             }
         }
 
         public void StopExposure() {
             CheckConnected("Not connected");
-            rpcClient.StopExposure(EMPTY_ARGS, deadline: GetDeadline());
+            rpcClient.StopExposure(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
         }
 
         public double SubExposureDuration {
@@ -1020,14 +1028,14 @@ namespace ASCOM.NINA.SBIGTracker {
                     return -1;
                 }
 
-                var value = rpcClient.SubExposureDuration_get(EMPTY_ARGS, deadline: GetDeadline());
+                var value = rpcClient.SubExposureDuration_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
                 tl.LogMessage("SubExposureDuration Get", value.Value.ToString());
                 return value.Value;
             }
             set {
                 CheckConnected("Not connected");
                 tl.LogMessage("SubExposureDuration Set", value.ToString());
-                rpcClient.SubExposureDuration_set(new SetDoublePropertyRequest() { Value = value }, deadline: GetDeadline());
+                rpcClient.SubExposureDuration_set(new SetDoublePropertyRequest() { Value = value }, deadline: GetDeadline(), cancellationToken: cts.Token);
             }
         }
 

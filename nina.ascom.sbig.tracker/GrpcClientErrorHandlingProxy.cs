@@ -42,7 +42,7 @@ namespace ASCOM.NINA.SBIGTracker {
             Task result = (Task)invocation.ReturnValue;
             if (result.IsFaulted) {
                 var translatedException = TranslateException(result.Exception);
-                if (!Object.ReferenceEquals(translatedException, result.Exception)) {
+                if (translatedException != null && !Object.ReferenceEquals(translatedException, result.Exception)) {
                     invocation.ReturnValue = Task.FromException(translatedException);
                 }
             }
@@ -53,7 +53,7 @@ namespace ASCOM.NINA.SBIGTracker {
             Task<TResult> result = (Task<TResult>)invocation.ReturnValue;
             if (result.IsFaulted) {
                 var translatedException = TranslateException(result.Exception);
-                if (!Object.ReferenceEquals(translatedException, result.Exception)) {
+                if (translatedException != null && !Object.ReferenceEquals(translatedException, result.Exception)) {
                     invocation.ReturnValue = Task.FromException<TResult>(translatedException);
                 }
             }
@@ -65,7 +65,7 @@ namespace ASCOM.NINA.SBIGTracker {
             } catch (AggregateException e) {
                 var innerException = e.InnerException;
                 var translatedException = TranslateException(innerException);
-                if (Object.ReferenceEquals(innerException, translatedException)) {
+                if (translatedException == null || Object.ReferenceEquals(innerException, translatedException)) {
                     throw;
                 } else {
                     throw translatedException;
