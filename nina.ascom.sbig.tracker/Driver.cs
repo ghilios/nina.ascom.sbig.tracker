@@ -585,54 +585,28 @@ namespace ASCOM.NINA.SBIGTracker {
 
         public short Gain {
             get {
-                if (!IsConnected) {
-                    return -1;
-                }
-
-                var value = rpcClient.Gain_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
-                tl.LogMessage("Gain Get", value.Value.ToString());
-                return checked((short)value.Value);
+                throw new ASCOM.PropertyNotImplementedException("Offset", false);
             }
             set {
-                CheckConnected("Not connected");
-                tl.LogMessage("Gain Set", value.ToString());
-                rpcClient.Gain_set(new SetShortPropertyRequest() { Value = value }, deadline: GetDeadline(), cancellationToken: cts.Token);
+                throw new ASCOM.PropertyNotImplementedException("Offset", true);
             }
         }
 
         public short GainMax {
             get {
-                if (!IsConnected) {
-                    return -1;
-                }
-
-                var value = rpcClient.GainMax_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
-                tl.LogMessage("GainMax Get", value.Value.ToString());
-                return checked((short)value.Value);
+                throw new ASCOM.PropertyNotImplementedException("Offset", false);
             }
         }
 
         public short GainMin {
             get {
-                if (!IsConnected) {
-                    return -1;
-                }
-
-                var value = rpcClient.GainMin_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
-                tl.LogMessage("GainMin Get", value.Value.ToString());
-                return checked((short)value.Value);
+                throw new ASCOM.PropertyNotImplementedException("Offset", false);
             }
         }
 
         public ArrayList Gains {
             get {
-                if (!IsConnected) {
-                    return new ArrayList();
-                }
-
-                var value = rpcClient.Gains_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
-                tl.LogMessage("Gains Get", value.Value.ToString());
-                return new ArrayList(value.Value);
+                throw new ASCOM.PropertyNotImplementedException("Offset", false);
             }
         }
 
@@ -672,7 +646,7 @@ namespace ASCOM.NINA.SBIGTracker {
                 var cameraImageArray = new int[value.Width, value.Height];
                 for (int y = 0; y < value.Height; ++y) {
                     for (int x = 0; x < value.Width; ++x) {
-                        cameraImageArray[x, y] = imageData[x * value.Height + y];
+                        cameraImageArray[x, y] = imageData[y * value.Width + x];
                     }
                 }
                 return cameraImageArray;
@@ -691,7 +665,7 @@ namespace ASCOM.NINA.SBIGTracker {
                 var cameraImageArrayVariant = new object[value.Width, value.Height];
                 for (int y = 0; y < value.Height; ++y) {
                     for (int x = 0; x < value.Width; ++x) {
-                        cameraImageArrayVariant[x, y] = imageData[x * value.Height + y];
+                        cameraImageArrayVariant[x, y] = imageData[y * value.Width + x];
                     }
                 }
                 return cameraImageArrayVariant;
@@ -818,54 +792,29 @@ namespace ASCOM.NINA.SBIGTracker {
 
         public int Offset {
             get {
-                if (!IsConnected) {
-                    return -1;
-                }
-
-                var value = rpcClient.Offset_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
-                tl.LogMessage("Offset Get", value.Value.ToString());
-                return value.Value;
+                throw new ASCOM.PropertyNotImplementedException("Offset", false);
             }
             set {
                 CheckConnected("Not connected");
-                tl.LogMessage("Offset Set", value.ToString());
-                rpcClient.Offset_set(new SetIntPropertyRequest() { Value = value }, deadline: GetDeadline(), cancellationToken: cts.Token);
+                throw new ASCOM.PropertyNotImplementedException("Offset", true);
             }
         }
 
         public int OffsetMax {
             get {
-                if (!IsConnected) {
-                    return -1;
-                }
-
-                var value = rpcClient.OffsetMax_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
-                tl.LogMessage("OffsetMax Get", value.Value.ToString());
-                return value.Value;
+                throw new ASCOM.PropertyNotImplementedException("OffsetMax", false);
             }
         }
 
         public int OffsetMin {
             get {
-                if (!IsConnected) {
-                    return -1;
-                }
-
-                var value = rpcClient.OffsetMin_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
-                tl.LogMessage("OffsetMin Get", value.Value.ToString());
-                return value.Value;
+                throw new ASCOM.PropertyNotImplementedException("OffsetMin", false);
             }
         }
 
         public ArrayList Offsets {
             get {
-                if (!IsConnected) {
-                    return new ArrayList();
-                }
-
-                var value = rpcClient.Offsets_get(EMPTY_ARGS, deadline: GetDeadline(), cancellationToken: cts.Token);
-                tl.LogMessage("Offsets Get", value.Value.ToString());
-                return new ArrayList(value.Value);
+                throw new ASCOM.PropertyNotImplementedException("Offsets", false);
             }
         }
 

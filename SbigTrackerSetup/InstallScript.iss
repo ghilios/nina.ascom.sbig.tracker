@@ -1,8 +1,8 @@
 [Setup]
 AppID={{6c6d8287-1918-4a91-a8c6-983695b20ddf}
 AppName=NINA SBIGTracker ASCOM Camera Driver
-AppVerName=NINA SBIGTracker ASCOM Camera Driver 0.2
-AppVersion=0.2
+AppVerName=NINA SBIGTracker ASCOM Camera Driver 0.3
+AppVersion=0.3
 AppPublisher=George Hilios <ghilios@gmail.com>
 AppPublisherURL=mailto:ghilios@gmail.com
 AppSupportURL=https://discord.com/invite/rWRbVbw
